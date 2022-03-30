@@ -1,26 +1,106 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/2.0/configuration-reference
+# Simple colcon build and deploy
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
-jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
-    docker:
-      - image: cimg/base:stable
-    # Add steps to the job
-    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
-    steps:
-      - checkout
-      - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
+orbs: 
+  aws-s3: circleci/aws-s3@3.0.0
 
-# Invoke jobs via workflows
-# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
-  say-hello-workflow:
+  build,test and create:
     jobs:
-      - say-hello
+      - build-test:
+          filters:
+            tags:
+              ignore: /[0-9]*\.[0-9]*\.[0-9]/
+      - create:
+          requires:
+            - build-test
+          context:
+            - ROS Pipelines
+
+  build,test,create and deploy:
+    jobs:
+      - build-test:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /[0-9]*\.[0-9]*\.[0-9]/
+      - create:
+          requires:
+            - build-test
+          context:
+            - ROS Pipelines
+      - deploy:
+          requires:
+            - build-test
+            - create
+          context:
+            - AWS ECR Access
+
+executors:
+  simple-docker:
+    docker:
+      - image: gallaisoma/ros2-galactic:latest
+    working_directory: ~/workspace/src/backward_ros 
+jobs:
+  build-test:
+    executor: simple-docker
+    steps:
+      - checkout:
+          path: ~/workspace/src/$CIRCLE_PROJECT_REPONAME
+      - run: 
+          name: Run build and test
+          command: |
+            cd ~/workspace/src
+            source /opt/ros/galactic/setup.bash
+            cd ~/workspace
+            colcon build 
+
+      - persist_to_workspace:
+          root: ../..
+          paths: 
+            - .
+  create:
+    executor: simple-docker
+    steps: 
+      - attach_workspace:
+          at: ~/workspace
+      - run:
+          name: Deploy the deb artifact
+          command: |
+            cd ~/workspace
+            mkdir ~/.ssh/
+            ssh-keyscan github.com >> ~/.ssh/known_hosts
+            git clone git@github.com:cmrobotics/pipeline_scripts.git
+            cd ~/workspace/pipeline_scripts
+            ./binarization.sh
+
+      - store_artifacts:
+          path: ~/workspace/src/ros-galactic-backward_ros.deb 
+
+      - persist_to_workspace:
+          root: ~/workspace
+          paths: 
+            - src/ros-galactic-backward_ros.deb 
+
+  deploy:
+    executor: simple-docker
+    steps:
+      - attach_workspace:
+          at: ~/workspace
+      - run:
+          name: Renaming with tag name
+          command: |
+            echo "current version: $CIRCLE_TAG"
+            mv ~/workspace/src/ros-galactic-$CIRCLE_PROJECT_REPONAME.deb ~/workspace/src/ros-galactic-$CIRCLE_PROJECT_REPONAME-$CIRCLE_TAG.deb
+            apt-get update
+            apt-get install unzip
+      - aws-s3/copy:
+          arguments: |
+            --acl private 
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-region: AWS_REGION
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          from: ~/workspace/src/ros-galactic-$CIRCLE_PROJECT_REPONAME-$CIRCLE_TAG.deb
+          to: 's3://aptly-debian-files/ros-galactic-$CIRCLE_PROJECT_REPONAME-$CIRCLE_TAG.deb'
+
