@@ -2,17 +2,12 @@
 Changelog for package backward_ros
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.0.1 (2021-07-14)
-------------------
-* Add missing ament_cmake dependency
-* Contributors: Victor Lopez
 
-1.0.0 (2021-07-13)
+0.1.8 (2021-07-13)
 ------------------
+* Update ROS2 note
 * Update backward.hpp from https://github.com/bombela/backward-cpp
-* Update README
-* Update package.xml
-* Adapt package to ROS2
+* Add note about ROS2 to readme
 * Contributors: Victor Lopez
 
 0.1.7 (2019-01-11)
