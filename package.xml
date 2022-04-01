@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>backward_ros</name>
   <version>0.1.8</version>
   <description>The backward_ros package is a ros wrapper of backward-cpp from https://github.com/bombela/backward-cpp </description>
@@ -9,10 +9,9 @@
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <depend>roscpp</depend>
   <depend>libdw-dev</depend>
 
   <export>
+    <build_type>ament_cmake</build_type>
   </export>
-
 </package>
